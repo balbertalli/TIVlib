@@ -316,6 +316,12 @@ class TIVCollection(TIV):
     def __str__(self):
         return self.tivlist
 
+    def key(self, mode='temperley'):
+        mean_energy = np.mean(self.energies, axis=0)
+        mean_vectors = np.mean(self.vectors, axis=0)
+        mean_tiv = TIV(mean_energy, mean_vectors)
+        return mean_tiv.key(mode=mode)
+
     @classmethod
     def from_pcp(cls, pcp):
         """
