@@ -295,11 +295,11 @@ class TIV:
         :param tiv2: The other tiv2 to compare to.
         :return: Number of pitch shifts to apply, small scale compatibility for that pitch shift.
         """
-        tiv_tranpositions = tiv2.get_12_transposes()
-        dissonances = []
-        for tiv_tranposition in tiv_tranpositions:
-            dissonances.append(self.small_scale_compatibility(tiv_tranposition))
-        dissonances = np.array(dissonances)
+        tiv_transpositions = tiv2.get_12_transpose_vectors()
+        relatedness = np.linalg.norm(self.vector[:, np.newaxis] - tiv_transpositions, axis=0)
+        dissonance_norm = 1 - (np.linalg.norm((self.vector[:, np.newaxis] + tiv_transpositions) / 2, axis=0) / np.linalg.norm(self.weights))
+        relatedness_norm = relatedness / (np.linalg.norm(self.weights) * 2)
+        dissonances = dissonance_norm * relatedness_norm
         pitch_shift = np.argmin(dissonances)
         if pitch_shift > 5:
             pitch_shift = pitch_shift - 12
@@ -388,6 +388,23 @@ class TIVCollection(TIV):
             tivlists.append(TIVCollection(set_tivs))
         return tivlists
 
+    def get_12_transpose_vectors(self):
+        """
+        Get all 12 possible transpositions for a TIVCollection
+        :return: a (N, 6, 12) array with all 12 possible transpositions [0-11]
+        """
+        n = 12
+        mod = np.abs(self.vectors)
+        phase = 1j * np.angle(self.vectors)
+        matmul = -2j * np.pi * (np.arange(12)[:, np.newaxis] * np.ones((6, 12, len(self.tivlist)), dtype=np.float64))
+        matmul = np.transpose(matmul, axes=(2, 0, 1))
+        semitones = np.arange(1, 7, dtype=np.float64)
+        semitones = semitones[:, np.newaxis]
+        phase_transposition = semitones * matmul / n
+        new_phase = phase[:, :, np.newaxis] + phase_transposition
+        new_vectors = mod[:, :, np.newaxis] * np.exp(new_phase)
+        return new_vectors
+
     def small_scale_compatibility(self, tivcol2):
         """
         Calculate small scale compatibility between two TIVCollections
@@ -396,10 +413,10 @@ class TIVCollection(TIV):
         """
         if len(tivcol2.tivlist) != len(self.tivlist):
             raise ValueError("Compatibility between different TIVCollections sizes are not supported yet")
-        h_comps = np.zeros(len(tivcol2.tivlist))
-        for idx in range(len(tivcol2.tivlist)):
-            h_comps[idx] = self.tivlist[idx].small_scale_compatibility(tivcol2[idx])
-        return np.sum(h_comps)
+        relatedness = np.linalg.norm(self.vectors - tivcol2.vectors, axis=1)
+        dissonance_norm = 1 - (np.linalg.norm((self.vectors + tivcol2.vectors) / 2, axis=1) / np.linalg.norm(self.weights))
+        relatedness_norm = relatedness / (np.linalg.norm(self.weights) * 2)
+        return np.sum(dissonance_norm * relatedness_norm)
 
     def get_max_compatibility(self, tivcol2):
         """
@@ -407,12 +424,13 @@ class TIVCollection(TIV):
         :param tivcol2: TIVCollection object to compare against
         :return: A tuple containing pitch shift and small scale compatibility
         """
-        tiv2transposes = tivcol2.get_12_transposes()
-        compatibilities = np.zeros(12)
-        for idx, transpose in enumerate(tiv2transposes):
-            compatibilities[idx] = self.small_scale_compatibility(transpose)
-
-        pitch_shift = np.argmin(compatibilities)
+        tiv2transposes = tivcol2.get_12_transpose_vectors()
+        relatedness = np.linalg.norm(self.vectors[:, :, np.newaxis] - tiv2transposes, axis=1)
+        dissonance_norm = 1 - (np.linalg.norm((self.vectors[:, :, np.newaxis] + tiv2transposes) / 2, axis=1) / np.linalg.norm(self.weights))
+        relatedness_norm = relatedness / (np.linalg.norm(self.weights) * 2)
+        dissonances = np.sum(dissonance_norm * relatedness_norm, axis=0)
+        pitch_shift = np.argmin(dissonances)
         if pitch_shift > 5:
             pitch_shift = pitch_shift - 12
-        return pitch_shift, np.min(compatibilities)
+        return pitch_shift, np.min(dissonances)
+
