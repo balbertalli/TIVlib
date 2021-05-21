@@ -224,6 +224,25 @@ class TIV:
             return transposition_desired
 
 
+    def get_transpose_vector(self, n_semitones):
+        """
+        Get the vector for a single transposition of the TIV
+        :param n_semitones: number of semitones to transpose (negative or positive)
+        :return: Shifted TIV vector
+        """
+        if n_semitones == 0:
+            return self
+        else:
+            mod = np.abs(self.vector)
+            phase = 1j * np.angle(self.vector)
+            matmul = -2j * np.pi * np.ones(6, dtype=np.float64) * n_semitones
+            semitones = np.arange(1, 7)
+            phase_transposition = semitones * matmul / 12
+            transposed_phase = phase_transposition + phase
+            transposed_vector = mod * np.exp(transposed_phase)
+            return transposed_vector
+            
+
     def get_12_transposes(self):
         """
         Get all 12 possible transpositions of the vector
@@ -240,6 +259,21 @@ class TIV:
         transposed_vector = mod[:, np.newaxis] * np.exp(transposed_phase)
         return [TIV(self.energy, transposed_vector[:, i]) for i in range(12)]
 
+    def get_12_transpose_vectors(self):
+        """
+        Get all 12 possible transpositions of the vector
+        :return: a (6, 12) shaped ndarray containing the 12 transpositions
+        """
+        n = 12
+        mod = np.abs(self.vector)
+        phase = 1j * np.angle(self.vector)
+        matmul = -2j * np.pi * (np.ones((6, 12), dtype=np.float64) * np.arange(12))
+        semitones = np.arange(1, 7)
+        semitones = semitones[:, np.newaxis]
+        phase_transposition = semitones * matmul / n  # 12 phase transpositions for each interval
+        transposed_phase = phase_transposition + phase[:, np.newaxis]
+        transposed_vector = mod[:, np.newaxis] * np.exp(transposed_phase)
+        return transposed_vector
 
     def small_scale_compatibility(self, cand_TIV):
         """
@@ -250,8 +284,6 @@ class TIV:
         :param cand_TIV: Candidate TIV object
         :return: The small scale compatibility
         """
-        mixed_TIV = self.combine(cand_TIV)
-        dissonance = mixed_TIV.dissonance()
         relatedness = TIV.euclidean(self, cand_TIV)
         dissonance_norm = 1 - (np.linalg.norm((self.vector + cand_TIV.vector)/2)/np.linalg.norm(self.weights))
         relatedness_norm = relatedness / (np.linalg.norm(self.weights)*2)
